@@ -44,7 +44,7 @@ msgs = readmsg(logimport, 'MessageName', 'LOCAL_POSITION_NED');
 LOCAL_POSITION_NED = msgs.Messages{1};
 [tempTime,temptimeidx]= unique(LOCAL_POSITION_NED.Time);
 roc = -interp1(tempTime,double(LOCAL_POSITION_NED.vz(temptimeidx)),Time);
-alt = -interp1(tempTime,double(LOCAL_POSITION_NED.z(temptimeidx)),Time)
+alt = -interp1(tempTime,double(LOCAL_POSITION_NED.z(temptimeidx)),Time);
 %
 clear msgs
 msgs = readmsg(logimport, 'MessageName', 'SCALED_PRESSURE2');
