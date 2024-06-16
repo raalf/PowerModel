@@ -100,7 +100,7 @@ airspeed=  airspeed ./ sqrt(density./1.225) ;
 
 AOA =2.5;
 % xacc = smooth(xacc,1000);
-D = fcn_drag(m,zacc,xacc,T,AOA,density,airspeed);
+D = fcn_drag(m,zacc,xacc,T,AOA,density,airspeed,'linus');
 
 accelpow = fcn_accelpower(m,xacc,g,pitch,airspeed);
 accelpow = accelpow-nanmean(accelpow);
