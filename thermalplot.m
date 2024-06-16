@@ -9,16 +9,23 @@
 clc
 clear
 
-density = 1.2; % Check
-S = 0.378;
-m = 1.8; % Confirm mass: 1.81 + battery?
+density = NaN;
 g = 9.807;
+xacc = 0;
+roc = 0;
+P_thermal = 0;
+V_thermal_smoothed = 0;
+zacc_smoothed = 0;
+lp = 5;
+powavail = 0;
+avgpoweravail = 0;
+avgpowerreq = 0;
+avgpowerbatt = 0;
 
-% Cd0 = 0.02423997;
-% Cdi = 0.03166895;
+m = 1.793;
+b = linspace(0,0.35,50);
+propd = 0.2794; %0.4699
 
-Cd0 = 0.018;
-Cdi = 0.0516;
 
 %% Initialize Plot
 
@@ -40,34 +47,10 @@ thermbuff = NaN(1, buffsize);
 thermbuffsmoothed = NaN(1, buffsize);
 zaccbuff = NaN(1, buffsize);
 zaccbuffsmoothed = NaN(1, buffsize);
-pybuffavail = NaN(2,buffsize);
-pybuffreq = NaN(2,buffsize);
-pybuffbatt = NaN(2, buffsize);
+pybuff = NaN(4,buffsize);
 
-count = 0;
-xacc = 0;
-roc = 0;
-P_thermal = 0;
-V_thermal_smoothed = 0;
-zacc_smoothed = 0;
-lp = 5;
-powavail = 0;
-new_voltage = 0;
-avgpoweravail = 0;
-avgpowerreq = 0;
-avgpowerbatt = 0;
 
-CLmindrag = 0.000000;
-Cd0 = 0.02477653;
-e = 0.36179696;
-AR = 17.05;
-S = 0.378460;
-m = 1.793;
-rho = 1.204;
-g = 9.81;
-b = linspace(0,0.35,50);
-V = 12.3;
-propd = 0.2794; %0.4699
+
 
 figure(66);
 clf(66);   
@@ -143,7 +126,7 @@ else
 end
 
 
-% thermal strength plot
+% Powers time history plot
 figure(68);
 clf(68);
 timeBuffer = [];
@@ -178,8 +161,10 @@ MESSAGE.RAW_IMU=mavlinksub(gcsNode, uavClient, 'RAW_IMU');
 MESSAGE.VFR_HUD=mavlinksub(gcsNode, uavClient, 'VFR_HUD');
 MESSAGE.LOCALPOSITION_NED=mavlinksub(gcsNode, uavClient, 'LOCAL_POSITION_NED');
 MESSAGE.SCALED_PRESSURE=mavlinksub(gcsNode,uavClient,'SCALED_PRESSURE');
+MESSAGE.SCALED_PRESSURE2=mavlinksub(gcsNode,uavClient,'SCALED_PRESSURE2');
 MESSAGE.RPM=mavlinksub(gcsNode,uavClient,'RPM');
 MESSAGE.ATTITUDE=mavlinksub(gcsNode,uavClient,'ATTITUDE');
+% MESSAGE.NAMED_VALUE_FLOAT=mavlinksub(gcsNode,uavClient,'NAMED_VALUE_FLOAT');
 pause(1)
 
 
@@ -205,13 +190,14 @@ while 1<2
         RPMraw = latestmsgs(MESSAGE.RPM, 1);
         ATTITUDE = latestmsgs(MESSAGE.ATTITUDE,1);
         BATTERY_STATUS=latestmsgs(MESSAGE.BATTERY_STATUS,1);
-        temperature = 20;
+        SCALED_PRESSURE2 = latestmsgs(MESSAGE.SCALED_PRESSURE2,1);
+        temperature = double(SCALED_PRESSURE2.Payload.temperature_press_diff)./100;
         pressure = double(SCALED_PRESSURE.Payload.press_abs) .* 100;
 
         density = pressure ./ ((temperature+273.15).*287.05);
 
-        % Getting airspeed
-        airspeed = double(VFR_HUD.Payload.airspeed);
+        % Getting TAS airspeed
+        airspeed = double(VFR_HUD.Payload.airspeed) ./ sqrt(density./1.225);
 
         % Getting descent rate
         roc = (-double(LOCALPOSITION_NED.Payload.vz));
@@ -219,13 +205,14 @@ while 1<2
         % Getting ESC RPM
         rpm = double(RPMraw.Payload.rpm1);
         n = rpm ./ 60;
-        if rpm<3500
+        if rpm<1000
             n=0;
         end
 
         xacc = double(RAW_IMU.Payload.xacc)./ 100;
         zacc = -double(RAW_IMU.Payload.zacc) ./ 100;
-
+        % zacc = zacc-0.19;
+        % xacc = xacc-0.025;
         pitch = double(ATTITUDE.Payload.pitch) .*180./pi;
         yaw = (double(ATTITUDE.Payload.yaw)) ;
         current = double(BATTERY_STATUS.Payload.current_battery)/100;
@@ -236,86 +223,46 @@ while 1<2
        
     if toc(plottimer) > plotper
 
-        % Average all data we've grabbed since the last plot
+        % STORE LAT AND LONG IN BUFFERS
         lat = double(GLOBAL_POSITION_INT.Payload.lat)./10000000;
         latbuff = [latbuff(2:end) lat];
         long = double(GLOBAL_POSITION_INT.Payload.lon)./10000000;
         longbuff = [longbuff(2:end) long];
         
-        % CALCULATING DRAG
+        % POWER AVAIL    
+        [powavail,T] = fcn_poweravail(rpm,propd,density,airspeed);
+       
+        AOA =2.5;
+        D = fcn_drag(m,zacc,xacc,T,AOA,density,airspeed,'linus');
+        
+        accelpow = fcn_accelpower(m,xacc,g,pitch,airspeed);
 
-        CL = 2*m*zacc./(S*rho*(V.^2));
-        Cd = Cd0 + (CL - CLmindrag).^2./(pi*e*AR);
-        D = Cd*S*rho.*(V.^2)./2;
+        lp = (lp*0.995) + (accelpow*0.005);
+        accelpow = accelpow-lp;
 
-        % Advance ratio
-        J = airspeed ./ (n .* propd);
-    
-        % CALCULATING CT
-
-        x = J;
-        y = rpm;
-        p00 =     0.05945;
-        p10 =    -0.01384;
-        p01 =   1.239e-05;
-        p20 =     -0.1057;
-        p11 =  -3.204e-06;
-        p02 =  -9.234e-10;
-
-        ct = p00 + p10.*x + p01.*y + p20.*x.^2 + p11.*x.*y + p02.*y.^2;
-        
-        if rpm<3500
-            ct=0;
-        end
-        
-        powavail = (ct*n*n*(propd)^4*density ) * airspeed;
-
-        % AVERAGE POWER AVAILABLE
-        
-        pybuffavail = [pybuffavail(:,2:end) [yaw ; powavail]];
-        try
-        %continous average over one loiter
-        f=(rad2deg(wrapTo2Pi(unwrap((pybuffavail(1,:)+pi))-yaw)))-180;
-        zerocross = find(f(2:end).*f(1:end-1)<0)  ;
-        idx_last_loiter = (zerocross(end-1));
-        avgpoweravail = mean(pybuffavail(2,zerocross(end-1):end), 'omitnan');
-        catch
-        end
-
-        % AVERAGE BATTERY POWER
-        
-        pybuffbatt = [pybuffbatt(:,2:end) [yaw ; powerbatt]];
-        try
-        %continous average over one loiter
-        fbatt=(rad2deg(wrapTo2Pi(unwrap((pybuffbatt(1,:)+pi))-yaw)))-180;
-        zerocrossbatt = find(fbatt(2:end).*fbatt(1:end-1)<0)  ;
-        idx_last_loiter_batt = (zerocrossbatt(end-1));
-        
-        avgpowerbatt = mean(pybuffbatt(2,zerocrossbatt(end-1):end), 'omitnan');
-        catch
-        end
-        
-        % CALCULATE POWER REQUIRED 
-        
-        accelpowreq = m * (xacc-g*sind(pitch)) * airspeed;
-        lp = (lp*0.995) + (accelpowreq*0.005);
-        accelpowreq = accelpowreq-lp;
         climbpowreq = m * g * roc;
         dragpowreq = D * airspeed;
-        powreq = accelpowreq + climbpowreq + dragpowreq;
+
+        % CALCULATE POWER REQUIRED 
+
+        powreq = accelpow + climbpowreq + dragpowreq;       
         
-        % AVERAGE POWER REQUIRED
         
-        pybuffreq = [pybuffreq(:,2:end) [yaw ; powreq]];
-        try
+        % LOITER AVERAGING       
+        pybuff = [pybuff(:,2:end) [yaw ; powavail ; powerbatt ; powreq]];
+        
+         try
         %continous average over one loiter
-        frequired=(rad2deg(wrapTo2Pi(unwrap((pybuffreq(1,:)+pi))-yaw)))-180;
-        zerocrossreq = find(frequired(2:end).*frequired(1:end-1)<0)  ;
-        idx_last_loiter_req = (zerocrossreq(end-1));
-        
-        avgpowerreq = mean(pybuffreq(2,zerocrossreq(end-1):end), 'omitnan');
+        f=(rad2deg(wrapTo2Pi(unwrap((pybuff(1,:)+pi))-yaw)))-180;
+        zerocross = find(f(2:end).*f(1:end-1)<0)  ;
+        idx_last_loiter = (zerocross(end-1));
+        avgpoweravail = mean(pybuff(2,zerocross(end-1):end), 'omitnan');
+        avgpowerbatt = mean(pybuff(3,zerocross(end-1):end), 'omitnan');
+        avgpowerreq = mean(pybuff(4,zerocross(end-1):end), 'omitnan');
         catch
         end
+
+
 
         % CALCULATE THERMAL 
         
@@ -353,8 +300,11 @@ while 1<2
 
         sz=( (thermbuffplot(2:end-1) + (-mint))./ (maxt-mint) .*40 + 25);
         hold on
+        colors= abs(thermbuffplot(2:end-1));
+        colors(colors>1) = 1;
+        % colors(isnan(colors))=0;
         h=geoscatter(gx(4),latbuff(2:end-1),longbuff(2:end-1),sz,thermbuffplot(2:end-1),...
-            'MarkerFaceColor','flat');
+            'MarkerFaceColor','flat','MarkerFaceAlpha','flat','AlphaData',colors);
 
         geoscatter(gx(4),lat,long,50,V_thermal,'filled','MarkerEdgeColor','w','LineWidth', 2)
         gx(4).ZoomLevelMode='auto';
@@ -443,13 +393,7 @@ while 1<2
         drawnow;
         
         plottimer = tic;
-        count = 0;
-        solarcount = 0;
-        escpow =0;
-        VE_ppv_W=0;
-        acvoltage =0;
-        voltcount = 0;
-        P_thermal = 0;
+       
     end
 end
 
@@ -460,9 +404,3 @@ clear all
 close all
 clc
 clear
-
-%%
-% Needs better function with n, torque and velocity
-function [eff] = eta_sys(J)
-eff = (-10.75 .* J.^4) + (4.29 .* J.^3) - (0.6074 .* J.^2) + (1.65 .* J) + 9.01e-05;
-end
