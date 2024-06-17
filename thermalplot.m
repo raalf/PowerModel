@@ -164,6 +164,7 @@ MESSAGE.SCALED_PRESSURE=mavlinksub(gcsNode,uavClient,'SCALED_PRESSURE');
 MESSAGE.SCALED_PRESSURE2=mavlinksub(gcsNode,uavClient,'SCALED_PRESSURE2');
 MESSAGE.RPM=mavlinksub(gcsNode,uavClient,'RPM');
 MESSAGE.ATTITUDE=mavlinksub(gcsNode,uavClient,'ATTITUDE');
+MESSAGE.GPS2_RAW=mavlinksub(gcsNode,uavClient,'GPS2_RAW');
 % MESSAGE.NAMED_VALUE_FLOAT=mavlinksub(gcsNode,uavClient,'NAMED_VALUE_FLOAT');
 pause(1)
 
@@ -191,9 +192,11 @@ while 1<2
         ATTITUDE = latestmsgs(MESSAGE.ATTITUDE,1);
         BATTERY_STATUS=latestmsgs(MESSAGE.BATTERY_STATUS,1);
         SCALED_PRESSURE2 = latestmsgs(MESSAGE.SCALED_PRESSURE2,1);
+        GPS2_RAW = latestmsgs(MESSAGE.GPS2_RAW,1);
+        GPS_speed = double(GPS2_RAW.Payload.vel)./100;
+
         temperature = double(SCALED_PRESSURE2.Payload.temperature_press_diff)./100;
         pressure = double(SCALED_PRESSURE.Payload.press_abs) .* 100;
-
         density = pressure ./ ((temperature+273.15).*287.05);
 
         % Getting TAS airspeed
@@ -230,9 +233,10 @@ while 1<2
         longbuff = [longbuff(2:end) long];
         
         % POWER AVAIL    
-        [powavail,T] = fcn_poweravail(rpm,propd,density,airspeed);
-       
         AOA =2.5;
+
+        [powavail,T] = fcn_poweravail(rpm,propd,density,airspeed,AOA);
+       
         D = fcn_drag(m,zacc,xacc,T,AOA,density,airspeed,'linus');
         
         accelpow = fcn_accelpower(m,xacc,g,pitch,airspeed);
