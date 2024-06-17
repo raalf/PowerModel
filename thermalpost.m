@@ -5,7 +5,7 @@
 
 %%tlog load
 dialect = mavlinkdialect("ardupilotmega.xml");
-logimport = mavlinktlog('2024-05-15 20-08-41.tlog',dialect);
+logimport = mavlinktlog('2024-06-15 19-49-34.tlog',dialect);
 % MESSAGE.GLOBAL_POSITION_INT=mavlinksub(gcsNode,uavClient,'GLOBAL_POSITION_INT');
 % MESSAGE.SYSTEM_TIME=mavlinksub(gcsNode,uavClient,'SYSTEM_TIME');
 %
@@ -94,16 +94,24 @@ propd = 0.2794; %0.4699
 %
 density = pressure ./ ((temperature+273.15).*287.05);
 airspeed=  airspeed ./ sqrt(density./1.225) ;
-
+AOA =2.5;
 % POWER AVAIL
-[powavail,T] = fcn_poweravail(rpm,propd,density,airspeed);
+[powavail,T] = fcn_poweravail(rpm,propd,density,airspeed,AOA);
 
 AOA =2.5;
 % xacc = smooth(xacc,1000);
 D = fcn_drag(m,zacc,xacc,T,AOA,density,airspeed,'linus');
+vdiff = diff(airspeed)./seconds(diff(Time));
+vdiff = [0; vdiff];
+accelpow = m.* vdiff .* airspeed;
+accelpow(isnan(accelpow)) = 0;
+accelpow = lowpass(accelpow,(0.5),10);
 
-accelpow = fcn_accelpower(m,xacc,g,pitch,airspeed);
-accelpow = accelpow-nanmean(accelpow);
+accelpow2 = fcn_accelpower(m,xacc,g,pitch,airspeed);
+% accelpow = accelpow-nanmean(accelpow);
+accelpow2(isnan(accelpow2)) = 0;
+accelpow2 = highpass(accelpow2,(0.001),10);
+
 % lp = (lp*0.995) + (accelpow*0.005);
 % accelpow = accelpow-lp;
 
@@ -117,7 +125,7 @@ powreq = accelpow + climbpowreq + dragpowreq;
 P_thermal = powreq - powavail;
 
 V_thermal = P_thermal./ (m*g); %thermal speed
-%%
+%
 figure(2);
 clf(2);
 s(1)=subplot(4,1,1);
@@ -126,8 +134,10 @@ grid on
 %             ylim([-30 100])
 ylabel('powavail')
 s(2)=subplot(4,1,2);
-plot(Time,accelpow,'.r');
 hold on
+plot(Time,accelpow,'.r');
+plot(Time,accelpow2,'.k');
+
 % plot(Time,kineticHP,'.');
 plot(Time,climbpowreq,'.b');
 grid on
