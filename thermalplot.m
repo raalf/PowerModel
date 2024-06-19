@@ -211,7 +211,6 @@ while 1<2
         AOA = double(AOA_SSA.Payload.AOA);
         temperature = double(SCALED_PRESSURE2.Payload.temperature_press_diff)./100;
         pressure = double(SCALED_PRESSURE.Payload.press_abs) .* 100;
-
         density = pressure ./ ((temperature+273.15).*287.05);
 
         % Getting TAS airspeed
