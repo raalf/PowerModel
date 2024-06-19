@@ -11,6 +11,7 @@ clear
 
 density = NaN;
 g = 9.807;
+g = 10;
 xacc = 0;
 roc = 0;
 P_thermal = 0;
@@ -22,10 +23,24 @@ avgpoweravail = 0;
 avgpowerreq = 0;
 avgpowerbatt = 0;
 
-m = 1.793;
-b = linspace(0,0.35,50);
-propd = 0.2794; %0.4699
+vehicle = 'jsbrascal';
 
+if strcmp(vehicle,'linus')
+
+m = 1.793;
+
+propd = 0.2794; %0.4699
+prop = '11x7';
+elseif strcmp(vehicle,'jsbrascal')
+
+m = 14.5/2.2;
+
+propd = 0.457; %0.4699
+prop = '18x8';
+
+end
+
+b = linspace(0,0.35,50);
 
 %% Initialize Plot
 
@@ -164,6 +179,7 @@ MESSAGE.SCALED_PRESSURE=mavlinksub(gcsNode,uavClient,'SCALED_PRESSURE');
 MESSAGE.SCALED_PRESSURE2=mavlinksub(gcsNode,uavClient,'SCALED_PRESSURE2');
 MESSAGE.RPM=mavlinksub(gcsNode,uavClient,'RPM');
 MESSAGE.ATTITUDE=mavlinksub(gcsNode,uavClient,'ATTITUDE');
+MESSAGE.AOA_SSA=mavlinksub(gcsNode,uavClient,'AOA_SSA');
 % MESSAGE.NAMED_VALUE_FLOAT=mavlinksub(gcsNode,uavClient,'NAMED_VALUE_FLOAT');
 pause(1)
 
@@ -191,6 +207,8 @@ while 1<2
         ATTITUDE = latestmsgs(MESSAGE.ATTITUDE,1);
         BATTERY_STATUS=latestmsgs(MESSAGE.BATTERY_STATUS,1);
         SCALED_PRESSURE2 = latestmsgs(MESSAGE.SCALED_PRESSURE2,1);
+        AOA_SSA = latestmsgs(MESSAGE.AOA_SSA,1);
+        AOA = double(AOA_SSA.Payload.AOA);
         temperature = double(SCALED_PRESSURE2.Payload.temperature_press_diff)./100;
         pressure = double(SCALED_PRESSURE.Payload.press_abs) .* 100;
 
@@ -229,11 +247,14 @@ while 1<2
         long = double(GLOBAL_POSITION_INT.Payload.lon)./10000000;
         longbuff = [longbuff(2:end) long];
         
-        % POWER AVAIL    
-        [powavail,T] = fcn_poweravail(rpm,propd,density,airspeed);
+        % POWER AVAIL
+
+        % AOA =0;
+        [powavail,T] = fcn_poweravail(rpm,propd,density,airspeed,AOA,vehicle,prop);
        
-        AOA =2.5;
-        D = fcn_drag(m,zacc,xacc,T,AOA,density,airspeed,'linus');
+        
+        D = fcn_drag(m,zacc,xacc,T,AOA,density,airspeed,vehicle);
+        
         
         accelpow = fcn_accelpower(m,xacc,g,pitch,airspeed);
 

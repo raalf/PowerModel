@@ -5,7 +5,7 @@
 
 %%tlog load
 dialect = mavlinkdialect("ardupilotmega.xml");
-logimport = mavlinktlog('2024-06-15 19-49-34.tlog',dialect);
+logimport = mavlinktlog('2024-06-17 21-04-46.tlog',dialect);
 % MESSAGE.GLOBAL_POSITION_INT=mavlinksub(gcsNode,uavClient,'GLOBAL_POSITION_INT');
 % MESSAGE.SYSTEM_TIME=mavlinksub(gcsNode,uavClient,'SYSTEM_TIME');
 %
@@ -19,14 +19,40 @@ logimport = mavlinktlog('2024-06-15 19-49-34.tlog',dialect);
 % MESSAGE.RPM=mavlinksub(gcsNode,uavClient,'RPM');
 % MESSAGE.ATTITUDE=mavlinksub(gcsNode,uavClient,'ATTITUDE');
 %%
+
+
+vehicle = 'jsbrascal';
+
+if strcmp(vehicle,'linus')
+
+m = 1.793;
+
+propd = 0.2794; %0.4699
+prop = '11x7';
+elseif strcmp(vehicle,'jsbrascal')
+
+m = 13/2.2;
+
+propd = 0.457; %0.4699
+prop = '18x8';
+
+end
+
+
+
 msgs = readmsg(logimport, 'MessageName', 'VFR_HUD');%,'Time',[2000,3428]);
 VFR_HUD = msgs.Messages{1};
 [Time,timeidx]= unique(VFR_HUD.Time);
 airspeed = double(VFR_HUD.airspeed(timeidx));
 
 clear msgs
+try
 msgs = readmsg(logimport, 'MessageName', 'GPS2_RAW');
 GLOBAL_POSITION_INT = msgs.Messages{1};
+catch
+msgs = readmsg(logimport, 'MessageName', 'GPS_RAW_INT');
+GLOBAL_POSITION_INT = msgs.Messages{1};
+end
 [tempTime,temptimeidx]= unique(GLOBAL_POSITION_INT.Time);
 lat = interp1(tempTime,double(GLOBAL_POSITION_INT.lat(temptimeidx)),Time)./1e7;
 lng = interp1(tempTime,double(GLOBAL_POSITION_INT.lon(temptimeidx)),Time)./1e7;
@@ -67,6 +93,13 @@ ATTITUDE = msgs.Messages{1};
 pitch = interp1(tempTime,double(ATTITUDE.pitch(temptimeidx)),Time).*180./pi;
 roll = interp1(tempTime,double(ATTITUDE.roll(temptimeidx)),Time).*180./pi;
 
+
+clear msgs
+msgs = readmsg(logimport, "MessageName", "AOA_SSA",'SystemID',1,'ComponentID',1);
+AOA_SSA = msgs.Messages{1};
+[tempTime,temptimeidx]= unique(AOA_SSA.Time);
+AOA = interp1(tempTime,double(AOA_SSA.AOA(temptimeidx)),Time);
+
 % SYNCFMT.RPM.rpm1 = rpm;
 % SYNCFMT.ARSP.Airspeed = airspeed;
 % SYNCFMT.IMU.AccZ = zacc;
@@ -80,9 +113,7 @@ g = 9.807;
 lp = 5;
 
 
-m = 1.793;
-b = linspace(0,0.35,50);
-propd = 0.2794; %0.4699
+
 
 % if ~exist('Time')
 % Time = cumtrapz((1/syncFreq).*ones(size(SYNCFMT.RPM.rpm1,1),1)) ;
@@ -94,27 +125,30 @@ propd = 0.2794; %0.4699
 %
 density = pressure ./ ((temperature+273.15).*287.05);
 airspeed=  airspeed ./ sqrt(density./1.225) ;
-AOA =2.5;
+% AOA =2.5;
 % POWER AVAIL
-[powavail,T] = fcn_poweravail(rpm,propd,density,airspeed,AOA);
+[powavail,T] = fcn_poweravail(rpm,propd,density,airspeed,AOA,vehicle,prop);
 
-AOA =2.5;
+
 % xacc = smooth(xacc,1000);
 D = fcn_drag(m,zacc,xacc,T,AOA,density,airspeed,'linus');
 vdiff = diff(airspeed)./seconds(diff(Time));
 vdiff = [0; vdiff];
 accelpow = m.* vdiff .* airspeed;
 accelpow(isnan(accelpow)) = 0;
-accelpow = lowpass(accelpow,(0.5),10);
-
+% accelpow = lowpass(accelpow,(0.5),10);
+% accelpow = lowpass(accelpow,(0.1),10);
+accelpow = smooth(accelpow,'moving',10000);
 accelpow2 = fcn_accelpower(m,xacc,g,pitch,airspeed);
 % accelpow = accelpow-nanmean(accelpow);
+
 accelpow2(isnan(accelpow2)) = 0;
 accelpow2 = highpass(accelpow2,(0.001),10);
 
 % lp = (lp*0.995) + (accelpow*0.005);
 % accelpow = accelpow-lp;
-
+% roc = diff(alt)./seconds(diff(Time));
+% roc = [0; roc];
 climbpowreq = m .* g .* roc;
 dragpowreq = D .* airspeed;
 
@@ -146,7 +180,7 @@ s(3) = subplot(4,1,3);
 plot(Time,dragpowreq,'.');
 grid on
 ylabel('drag')
-ylim([10 40])
+% ylim([10 40])
 s(4) = subplot(4,1,4);
 hold on
 plot(Time,V_thermal,'.');
@@ -162,7 +196,7 @@ cleaned = 0;
 % plot(Time,V_clean,'.');
 ylabel('V thermal')
 grid on
-ylim([-2 2])
+ylim([-30 30])
 
 linkaxes(s,'x')
 %     xlim([7300 8800])
