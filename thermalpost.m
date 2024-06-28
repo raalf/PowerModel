@@ -5,7 +5,7 @@
 
 %%tlog load
 dialect = mavlinkdialect("ardupilotmega.xml");
-logimport = mavlinktlog('2024-06-17 21-04-46.tlog',dialect);
+logimport = mavlinktlog('2024-06-24 20-11-00.tlog',dialect);
 % MESSAGE.GLOBAL_POSITION_INT=mavlinksub(gcsNode,uavClient,'GLOBAL_POSITION_INT');
 % MESSAGE.SYSTEM_TIME=mavlinksub(gcsNode,uavClient,'SYSTEM_TIME');
 %
@@ -21,7 +21,7 @@ logimport = mavlinktlog('2024-06-17 21-04-46.tlog',dialect);
 %%
 
 
-vehicle = 'jsbrascal';
+vehicle = 'linus';
 
 if strcmp(vehicle,'linus')
 
@@ -47,11 +47,11 @@ airspeed = double(VFR_HUD.airspeed(timeidx));
 
 clear msgs
 try
-msgs = readmsg(logimport, 'MessageName', 'GPS2_RAW');
-GLOBAL_POSITION_INT = msgs.Messages{1};
+    msgs = readmsg(logimport, 'MessageName', 'GPS_RAW_INT');
+    GLOBAL_POSITION_INT = msgs.Messages{1};
 catch
-msgs = readmsg(logimport, 'MessageName', 'GPS_RAW_INT');
-GLOBAL_POSITION_INT = msgs.Messages{1};
+    msgs = readmsg(logimport, 'MessageName', 'GPS2_RAW');
+    GLOBAL_POSITION_INT = msgs.Messages{1};
 end
 [tempTime,temptimeidx]= unique(GLOBAL_POSITION_INT.Time);
 lat = interp1(tempTime,double(GLOBAL_POSITION_INT.lat(temptimeidx)),Time)./1e7;
@@ -130,16 +130,18 @@ airspeed=  airspeed ./ sqrt(density./1.225) ;
 [powavail,T] = fcn_poweravail(rpm,propd,density,airspeed,AOA,vehicle,prop);
 
 
+
 % xacc = smooth(xacc,1000);
-D = fcn_drag(m,zacc,xacc,T,AOA,density,airspeed,'linus');
+[D] = fcn_drag(m,zacc,xacc,T,AOA,density,airspeed,vehicle);
+
 vdiff = diff(airspeed)./seconds(diff(Time));
 vdiff = [0; vdiff];
 accelpow = m.* vdiff .* airspeed;
 accelpow(isnan(accelpow)) = 0;
 % accelpow = lowpass(accelpow,(0.5),10);
-% accelpow = lowpass(accelpow,(0.1),10);
+accelpow = lowpass(accelpow,(0.1),10);
 accelpow = smooth(accelpow,'moving',10000);
-accelpow2 = fcn_accelpower(m,xacc,g,pitch,airspeed);
+accelpow2 = fcn_accelpower(m,xacc,zacc,g,pitch,roll,airspeed,AOA);
 % accelpow = accelpow-nanmean(accelpow);
 
 accelpow2(isnan(accelpow2)) = 0;
@@ -147,8 +149,23 @@ accelpow2 = highpass(accelpow2,(0.001),10);
 
 % lp = (lp*0.995) + (accelpow*0.005);
 % accelpow = accelpow-lp;
-% roc = diff(alt)./seconds(diff(Time));
-% roc = [0; roc];
+
+roc2 = diff(alt)./seconds(diff(Time));
+roc2 = [0; roc2];
+
+% figure(3)
+% clf(3)
+% grid on
+% hold on
+% plot(Time,roc)
+% plot(Time,roc2)
+% 
+
+roc3 = airspeed.*(sind(pitch).*cosd(AOA)) -airspeed.*(cosd(pitch).*cosd(roll).*sind(AOA));
+% 
+% plot(Time,roc3)
+% legend('roc','roc2','calc')
+
 climbpowreq = m .* g .* roc;
 dragpowreq = D .* airspeed;
 
@@ -159,6 +176,9 @@ powreq = accelpow + climbpowreq + dragpowreq;
 P_thermal = powreq - powavail;
 
 V_thermal = P_thermal./ (m*g); %thermal speed
+% V_thermal2 = roc - roc3
+
+% plot(Time,roll./20)
 %
 figure(2);
 clf(2);
@@ -180,10 +200,11 @@ s(3) = subplot(4,1,3);
 plot(Time,dragpowreq,'.');
 grid on
 ylabel('drag')
-% ylim([10 40])
+ylim([10 40])
 s(4) = subplot(4,1,4);
 hold on
 plot(Time,V_thermal,'.');
+% plot(Time,V_thermal2,'.r');
 cleaned = 0;
 % for i = 1:length(V_thermal)
 %     if isnan(V_thermal(i))
@@ -196,7 +217,7 @@ cleaned = 0;
 % plot(Time,V_clean,'.');
 ylabel('V thermal')
 grid on
-ylim([-30 30])
+ylim([-3 3])
 
 linkaxes(s,'x')
 %     xlim([7300 8800])

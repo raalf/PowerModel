@@ -9,9 +9,23 @@
 clc
 clear
 
+%% audio vario
+vario = 1
+
+if vario == 1
+
+
+ lift = [0.3 4 ; 550 1800 ; 1 0.2];
+sink = [-4 -0.3 ; 200 275 ];
+variotimer = tic;
+variowait = 1;
+
+
+
+end
+%% 
 density = NaN;
 g = 9.807;
-g = 10;
 xacc = 0;
 roc = 0;
 P_thermal = 0;
@@ -23,20 +37,20 @@ avgpoweravail = 0;
 avgpowerreq = 0;
 avgpowerbatt = 0;
 
-vehicle = 'jsbrascal';
-
+vehicle = 'linus';
+plotzacc = false
 if strcmp(vehicle,'linus')
 
-m = 1.793;
+    m = 1.793;
 
-propd = 0.2794; %0.4699
-prop = '11x7';
+    propd = 0.2794; %0.4699
+    prop = '11x7';
 elseif strcmp(vehicle,'jsbrascal')
 
-m = 14.5/2.2;
+    m =  5.89;
 
-propd = 0.457; %0.4699
-prop = '18x8';
+    propd = 0.457; %0.4699
+    prop = '18x8';
 
 end
 
@@ -51,7 +65,6 @@ url = 'https://google.com';
 [~,internet] = urlread(url);
 
 plottimer = tic;
-
 buffsize = 90; %number of points to show
 freq = 30; %frequency to average at Hz (need to be high to get solar data)
 plotper = 1; %plot period in s
@@ -68,7 +81,7 @@ pybuff = NaN(4,buffsize);
 
 
 figure(66);
-clf(66);   
+clf(66);
 gx(4)=geoaxes;
 gx(4).ZoomLevel = 17;
 colormap(gx(4),(cool));
@@ -88,32 +101,34 @@ gx(4).LongitudeAxis.Label.String='';
 
 title('thermal')
 
-figure(69);
-clf(69);
-gx2(4)=geoaxes;
-gx2(4).ZoomLevel = 17;
-colormap(gx2(4),(cool));
+if plotzacc == true
+    figure(69);
+    clf(69);
+    gx2(4)=geoaxes;
+    gx2(4).ZoomLevel = 17;
+    colormap(gx2(4),(cool));
 
-cb5 = colorbar(gx2(4)); %,'Position',[.88 .11 .04 .815]);
-cb5.Label.FontWeight = 'Bold';
-cb5.Label.FontSize = 10;
-cb5.FontWeight = 'Bold';
-cb5.FontSize = 10;
-cb5.Label.String = 'Zacc (m/s^2)';
+    cb5 = colorbar(gx2(4)); %,'Position',[.88 .11 .04 .815]);
+    cb5.Label.FontWeight = 'Bold';
+    cb5.Label.FontSize = 10;
+    cb5.FontWeight = 'Bold';
+    cb5.FontSize = 10;
+    cb5.Label.String = 'Zacc (m/s^2)';
 
-gx2(4).LatitudeAxis.TickValues=[];
-gx2(4).LongitudeAxis.TickValues=[];
+    gx2(4).LatitudeAxis.TickValues=[];
+    gx2(4).LongitudeAxis.TickValues=[];
 
-gx2(4).LatitudeAxis.Label.String='';
-gx2(4).LongitudeAxis.Label.String='';
+    gx2(4).LatitudeAxis.Label.String='';
+    gx2(4).LongitudeAxis.Label.String='';
 
-title('zacc')
-
+    title('zacc')
+end
 if internet == true
-% use regular satellite map
-geobasemap(gx(4),'satellite');
-geobasemap(gx2(4),'satellite');
-
+    % use regular satellite map
+    geobasemap(gx(4),'satellite');
+    if plotzacc == true
+        geobasemap(gx2(4),'satellite');
+    end
 else
     % offline map stuff
     % Connect to Local Server
@@ -122,16 +137,16 @@ else
     try
         % try to contact the local server for 2 seconds, see if it responds
         response = webread('http://localhost:8000', weboptions('Timeout', 2));
-    
+
         % If the request is successful, print
         disp('Http server is already running');
-    
+
     catch
         % If the request fails, start the server
         disp('Starting server...');
         system(['start python -m http.server 8000 ', ' --directory "', directory, '"'], '-echo');
     end
-    
+
     % create offline basemap
     basemapName = "MissionPlannerCache";
     URL = 'http://localhost:8000/{z}/{y}/{x}.jpg';
@@ -231,13 +246,57 @@ while 1<2
         % zacc = zacc-0.19;
         % xacc = xacc-0.025;
         pitch = double(ATTITUDE.Payload.pitch) .*180./pi;
+        roll = double(ATTITUDE.Payload.roll) .*180./pi;
         yaw = (double(ATTITUDE.Payload.yaw)) ;
         current = double(BATTERY_STATUS.Payload.current_battery)/100;
         voltage = double(BATTERY_STATUS.Payload.voltages(1))/1000;
         powerbatt = current*voltage;
+
     end
 
-       
+  if vario == 1
+ if toc(variotimer) > variowait
+
+      thermal = thermbuffsmoothed(end)
+        
+        if thermal > 5
+            thermal = 5;
+        elseif thermal < -5
+            thermal = -5
+        end
+        try
+            if thermal > 0
+                duration = interp1(lift(1,:),lift(3,:),thermal);
+                if duration<0.1
+                    duration = 0.1;
+                end
+                w = 2*pi*interp1(lift(1,:),lift(2,:),thermal); % Radian Value To Create Tone
+
+                Fs = 14400;                                     % Sampling Frequency
+                t  = linspace(0, duration, Fs.*duration);                        % One Second Time Vector
+                s = sin(w*t) ;                                   % Create Tone
+                s(end-1000:end) = 0;
+                sound([s], Fs)                                    % Produce Tone As Sound
+                variowait = (duration);
+
+            elseif thermal <0
+                w = 2*pi*interp1(sink(1,:),sink(2,:),thermal);   % Radian Value To Create 1kHz Tone
+
+                Fs = 14400;                                     % Sampling Frequency
+                duration = 1;
+                t  = linspace(0, duration, Fs.*duration);                        % One Second Time Vector
+                s = sin(w*t);                
+                sound([s], Fs)                                    % Produce Tone As Sound
+                variowait = (0.8);
+               toc(temptimer)
+                temptimer = tic;
+
+            end
+        end
+        variotimer = tic;
+ end
+
+  end
     if toc(plottimer) > plotper
 
         % STORE LAT AND LONG IN BUFFERS
@@ -245,47 +304,49 @@ while 1<2
         latbuff = [latbuff(2:end) lat];
         long = double(GLOBAL_POSITION_INT.Payload.lon)./10000000;
         longbuff = [longbuff(2:end) long];
-        
+
         % POWER AVAIL
 
         % AOA =0;
         [powavail,T] = fcn_poweravail(rpm,propd,density,airspeed,AOA,vehicle,prop);
-       
-        
+
+
         D = fcn_drag(m,zacc,xacc,T,AOA,density,airspeed,vehicle);
-        
-        
-        accelpow = fcn_accelpower(m,xacc,g,pitch,airspeed);
+
+
+        accelpow = fcn_accelpower(m,xacc,zacc,g,pitch,roll,airspeed,AOA);
+
 
         lp = (lp*0.995) + (accelpow*0.005);
         accelpow = accelpow-lp;
+        roc3 = airspeed.*(sind(pitch).*cosd(AOA)) +airspeed.*(cosd(pitch).*cosd(roll).*sind(AOA));
 
         climbpowreq = m * g * roc;
         dragpowreq = D * airspeed;
 
-        % CALCULATE POWER REQUIRED 
+        % CALCULATE POWER REQUIRED
 
-        powreq = accelpow + climbpowreq + dragpowreq;       
-        
-        
-        % LOITER AVERAGING       
+        powreq = accelpow + climbpowreq + dragpowreq;
+
+
+        % LOITER AVERAGING
         pybuff = [pybuff(:,2:end) [yaw ; powavail ; powerbatt ; powreq]];
-        
-         try
-        %continous average over one loiter
-        f=(rad2deg(wrapTo2Pi(unwrap((pybuff(1,:)+pi))-yaw)))-180;
-        zerocross = find(f(2:end).*f(1:end-1)<0)  ;
-        idx_last_loiter = (zerocross(end-1));
-        avgpoweravail = mean(pybuff(2,zerocross(end-1):end), 'omitnan');
-        avgpowerbatt = mean(pybuff(3,zerocross(end-1):end), 'omitnan');
-        avgpowerreq = mean(pybuff(4,zerocross(end-1):end), 'omitnan');
+
+        try
+            %continous average over one loiter
+            f=(rad2deg(wrapTo2Pi(unwrap((pybuff(1,:)+pi))-yaw)))-180;
+            zerocross = find(f(2:end).*f(1:end-1)<0)  ;
+            idx_last_loiter = (zerocross(end-1));
+            avgpoweravail = mean(pybuff(2,zerocross(end-1):end), 'omitnan');
+            avgpowerbatt = mean(pybuff(3,zerocross(end-1):end), 'omitnan');
+            avgpowerreq = mean(pybuff(4,zerocross(end-1):end), 'omitnan');
         catch
         end
 
 
 
-        % CALCULATE THERMAL 
-        
+        % CALCULATE THERMAL
+
         P_thermal = powreq - powavail;
 
         V_thermal = P_thermal./ (m*g); %thermal speed
@@ -294,7 +355,7 @@ while 1<2
         thermbuff = [thermbuff(2:end) V_thermal];
         thermbuffsmoothed = [thermbuffsmoothed(2:end) V_thermal_smoothed];
 
-        % PLOT 
+        % PLOT
 
         figure(66)
 
@@ -334,7 +395,7 @@ while 1<2
         end
         currentAxis = gca;
         currentAxis.Position(3) = 0.5;
-        
+
         % Average power box
         delete(findall(gcf,'Tag','avgpowerprop'));
         str = {["AVG POWER AVAIL: " + avgpoweravail + " W"], ["AVG POWER REQUIRED: " + avgpowerreq + " W"], ["AVG POWER BATT: " + avgpowerbatt + " W"]};
@@ -348,52 +409,52 @@ while 1<2
 
         dateTime = datestr(datetime(unixTime/1e6, 'ConvertFrom', 'posixtime', 'TimeZone', 'America/Toronto'), 'dd-mmm-yyyy HH:MM:SS');
         subtitle(dateTime + "  microsec: " + time*1000+ "  Bin xx");
-        
-        figure(69)
+        if plotzacc == true
+            figure(69)
 
-        zacc_smoothed = zacc_smoothed*0.4 + zacc*0.6;
+            zacc_smoothed = zacc_smoothed*0.4 + zacc*0.6;
 
-        zaccbuff = [zaccbuff(2:end) zacc];
-        zaccbuffsmoothed = [zaccbuffsmoothed(2:end) zacc_smoothed];
-        try
-            delete(findobj(gx2(4),'type','Scatter'))
-        end
-
-        zaccbuffplot = zaccbuffsmoothed;
-
-        try
-            mint = min(zaccbuffplot(2:end-1));
-            maxt = max(zaccbuffplot(2:end-1));
-            if abs(mint)>abs(maxt)
-                caxis(gx2(4),[6 abs(mint)])
-            else
-                caxis(gx2(4),[6 maxt])
+            zaccbuff = [zaccbuff(2:end) zacc];
+            zaccbuffsmoothed = [zaccbuffsmoothed(2:end) zacc_smoothed];
+            try
+                delete(findobj(gx2(4),'type','Scatter'))
             end
-            % % caxis(gx(4),[mint maxt])
-        catch
-            caxis(gx2(4),'auto')
+
+            zaccbuffplot = zaccbuffsmoothed;
+
+            try
+                mint = min(zaccbuffplot(2:end-1));
+                maxt = max(zaccbuffplot(2:end-1));
+                if abs(mint)>abs(maxt)
+                    caxis(gx2(4),[6 abs(mint)])
+                else
+                    caxis(gx2(4),[6 maxt])
+                end
+                % % caxis(gx(4),[mint maxt])
+            catch
+                caxis(gx2(4),'auto')
+            end
+
+            sz=( (zaccbuffplot(2:end-1) + (-mint))./ (maxt-mint) .*40 + 25);
+            hold on
+            h=geoscatter(gx2(4),latbuff(2:end-1),longbuff(2:end-1),sz,zaccbuffplot(2:end-1),...
+                'MarkerFaceColor','flat');
+
+            geoscatter(gx2(4),lat,long,50,zacc,'filled','MarkerEdgeColor','w','LineWidth', 2)
+            gx2(4).ZoomLevelMode='auto';
+
+            if gx2(4).ZoomLevel > 17
+                gx2(4).ZoomLevel = 17;
+            end
+
+            titlecolor=interp1(linspace(gx2(4).CLim(1),gx2(4).CLim(2),length(gx2(4).Colormap)), gx2(4).Colormap,zacc,'nearest','extrap');
+            str = "Zacc: " + round(zacc,2) + " m/s^2 ";
+
+            title(str,'BackgroundColor',titlecolor)
+
+            dateTime = datestr(datetime(unixTime/1e6, 'ConvertFrom', 'posixtime', 'TimeZone', 'America/Toronto'), 'dd-mmm-yyyy HH:MM:SS');
+            subtitle(dateTime + "  microsec: " + time*1000 + "  Bin xx");
         end
-
-        sz=( (zaccbuffplot(2:end-1) + (-mint))./ (maxt-mint) .*40 + 25);
-        hold on
-        h=geoscatter(gx2(4),latbuff(2:end-1),longbuff(2:end-1),sz,zaccbuffplot(2:end-1),...
-            'MarkerFaceColor','flat');
-
-        geoscatter(gx2(4),lat,long,50,zacc,'filled','MarkerEdgeColor','w','LineWidth', 2)
-        gx2(4).ZoomLevelMode='auto';
-
-        if gx2(4).ZoomLevel > 17
-            gx2(4).ZoomLevel = 17;
-        end
-
-        titlecolor=interp1(linspace(gx2(4).CLim(1),gx2(4).CLim(2),length(gx2(4).Colormap)), gx2(4).Colormap,zacc,'nearest','extrap');
-        str = "Zacc: " + round(zacc,2) + " m/s^2 ";
-
-        title(str,'BackgroundColor',titlecolor)
-
-        dateTime = datestr(datetime(unixTime/1e6, 'ConvertFrom', 'posixtime', 'TimeZone', 'America/Toronto'), 'dd-mmm-yyyy HH:MM:SS');
-        subtitle(dateTime + "  microsec: " + time*1000 + "  Bin xx");
-        
         % Update buffers
         timeBuffer = [timeBuffer time];
         pavailBuffer = [pavailBuffer powavail];
@@ -411,9 +472,14 @@ while 1<2
         set(powavail_plot, 'XData', timeBuffer, 'YData', pavailBuffer);
         set(powreq_plot, 'XData', timeBuffer, 'YData', preqBuffer);
         drawnow;
-        
+
+
+
+
+
+
         plottimer = tic;
-       
+
     end
 end
 
@@ -424,3 +490,6 @@ clear all
 close all
 clc
 clear
+
+
+

@@ -2,7 +2,7 @@ function [D] = fcn_drag(m,zacc,xacc,T,AOA,density,airspeed,vehicle)
 
 if strcmp(vehicle,'linus')
     CLmindrag = 0.000000;
-    Cd0 = 0.02477653 -0.005;
+    Cd0 = 0.02477653 +0.005;
     e = 0.36179696;
     AR = 17.05;
     S = 0.378460;

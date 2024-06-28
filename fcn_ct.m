@@ -27,7 +27,7 @@ elseif strcmp(prop,'18x8')
 
 end
 %force ct to zero when rpm is small
-% % ct(rpm<1500) = 0;
+ct(rpm<2500) = 0;
 % if rpm<1000
 %     ct=0;
 % end
