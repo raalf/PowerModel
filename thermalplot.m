@@ -10,17 +10,17 @@ clc
 clear
 
 %% audio vario
-vario = 1
+vario = 1;
 
 if vario == 1
 
-
- lift = [0.3 4 ; 550 1800 ; 1 0.2];
-sink = [-4 -0.3 ; 200 275 ];
+%[thermal strength; freq Hz; beep period]
+ lift = [0.3 1 3 ; 550 700 2000 ; 1 1 0.2];
+sink = [-3 -0.3 ; 200 275 ];
 variotimer = tic;
 variowait = 1;
 
-
+%200 350
 
 end
 %% 
@@ -257,41 +257,66 @@ while 1<2
   if vario == 1
  if toc(variotimer) > variowait
 
-      thermal = thermbuffsmoothed(end)
+      thermal = thermbuffsmoothed(end) ;
         
-        if thermal > 5
-            thermal = 5;
-        elseif thermal < -5
-            thermal = -5
+        if thermal > 3
+            thermal = 3;
+        elseif thermal < -3
+            thermal = -3
         end
         try
-            if thermal > 0
+            if thermal > 0.3
                 duration = interp1(lift(1,:),lift(3,:),thermal);
-                if duration<0.1
-                    duration = 0.1;
+                if duration<0.2
+                    duration = 0.2;
                 end
                 w = 2*pi*interp1(lift(1,:),lift(2,:),thermal); % Radian Value To Create Tone
 
                 Fs = 14400;                                     % Sampling Frequency
                 t  = linspace(0, duration, Fs.*duration);                        % One Second Time Vector
-                s = sin(w*t) ;                                   % Create Tone
-                s(end-1000:end) = 0;
+                w = w.*ones(size(t,2),1);
+
+                fadet = min([4000,length(t)]);
+                w(1:fadet) = linspace(lastw,w(fadet),fadet); %blend from the last frequency
+
+                s = sin(w'.*t) ;        %Create Tone             
+                ramp = linspace(0, 1, 100);
+                s(1:100) = s(1:100).*ramp; %fade in and out
+                if thermal > 1
+                    s(end-2000:end) = 0; %add pause
+                    s(end-2099:end-2000) = s(end-2099:end-2000).*flip(ramp); %fade out
+                else
+                    s(end-99:end) = s(end-99:end).*flip(ramp);%fade out
+                end
+           
                 sound([s], Fs)                                    % Produce Tone As Sound
-                variowait = (duration);
+                variowait = (duration-0.05);
+                lastw = w(end-500);
 
-            elseif thermal <0
+            elseif thermal <-0.3
                 w = 2*pi*interp1(sink(1,:),sink(2,:),thermal);   % Radian Value To Create 1kHz Tone
-
+               
                 Fs = 14400;                                     % Sampling Frequency
                 duration = 1;
                 t  = linspace(0, duration, Fs.*duration);                        % One Second Time Vector
-                s = sin(w*t);                
+                w = w.*ones(size(t,2),1);
+                w(1:4000) = linspace(lastw,w(4000),4000); %blend from the last frequency
+                
+                s = sin(w'.*t);                 
+                ramp = linspace(0, 1, 200);
+                s(1:200) = s(1:200).*ramp; %fade in and out
+                s(end-199:end) = s(end-199:end).*flip(ramp);
                 sound([s], Fs)                                    % Produce Tone As Sound
-                variowait = (0.8);
+                variowait = (0.8); % need to get this time right
+                lastw = w(end-200);
                toc(temptimer)
                 temptimer = tic;
-
+            else
+                lastw = 2*pi*290;
+                variowait=0.5;
             end
+       
+
         end
         variotimer = tic;
  end
@@ -464,8 +489,8 @@ while 1<2
         % Limit buffer size
         if length(timeBuffer) > 1000
             timeBuffer = timeBuffer(end-999:end);
-            powavailBuffer = powavailBuffer(end-999:end);
-            powreqBuffer = powreqBuffer(end-999:end);
+            powavailBuffer = pavailBuffer(end-999:end);
+            powreqBuffer = preqBuffer(end-999:end);
         end
 
         % Update the plots
