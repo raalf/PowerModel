@@ -10,13 +10,13 @@ clc
 clear
 
 %% audio vario
-vario = 1;
+vario =0;
 
 if vario == 1
 
 %[thermal strength; freq Hz; beep period]
  lift = [0.3 1 3 ; 550 700 2000 ; 1 1 0.2];
-sink = [-3 -0.3 ; 200 275 ];
+sink = [-3 -0.3 ; 200 255 ];
 variotimer = tic;
 variowait = 1;
 
@@ -30,6 +30,7 @@ xacc = 0;
 roc = 0;
 P_thermal = 0;
 V_thermal_smoothed = 0;
+
 zacc_smoothed = 0;
 lp = 5;
 powavail = 0;
@@ -47,9 +48,9 @@ if strcmp(vehicle,'linus')
     prop = '11x7';
 elseif strcmp(vehicle,'jsbrascal')
 
-    m =  5.89;
+    m =  5.8967;
 
-    propd = 0.457; %0.4699
+    propd = 0.4572; %0.4699
     prop = '18x8';
 
 end
@@ -67,7 +68,7 @@ url = 'https://google.com';
 plottimer = tic;
 buffsize = 90; %number of points to show
 freq = 30; %frequency to average at Hz (need to be high to get solar data)
-plotper = 1; %plot period in s
+plotper = 0.5; %plot period in s
 
 latbuff = NaN(1,buffsize);
 longbuff = NaN(1,buffsize);
@@ -132,44 +133,59 @@ if internet == true
 else
     % offline map stuff
     % Connect to Local Server
-    directory = 'C:\ProgramData\Mission Planner\gmapcache\TileDBv3\en\GoogleSatelliteMap';
+     
     % Try to open a connection to the server
     try
         % try to contact the local server for 2 seconds, see if it responds
-        response = webread('http://localhost:8000', weboptions('Timeout', 2));
-
+        % response = webread('http://localhost:8000', weboptions('Timeout', 2));
+response = webread('http://localhost:8000/',  weboptions('Timeout', 2));
         % If the request is successful, print
         disp('Http server is already running');
 
     catch
         % If the request fails, start the server
-        disp('Starting server...');
+        
+        if system('python --version')==9009
+         disp('Trying to start server on WSL...');
+         directory = '/mnt/c/ProgramData/Mission\ Planner/gmapcache/TileDBv3/en/GoogleSatelliteMap';
+        system(['ubuntu run python -m http.server 8000 ', ' --directory "', directory, '"&' ]);  
+        
+        else 
+
+        disp('Trying to start server on Windows...');
+         directory = 'C:\ProgramData\Mission/Planner\gmapcache\TileDBv3\en\GoogleSatelliteMap';
+  
         system(['start python -m http.server 8000 ', ' --directory "', directory, '"'], '-echo');
+   
+        end
+
     end
 
     % create offline basemap
     basemapName = "MissionPlannerCache";
-    URL = 'http://localhost:8000/{z}/{y}/{x}.jpg';
+    URL = 'http://localhost:8000/${z}/${y}/${x}.jpg';
     addCustomBasemap(basemapName, URL, "Attribution", '')
     geobasemap(gx(4),basemapName);
-    geobasemap(gx2(4),basemapName);
+    % if plotzacc == true
+    % geobasemap(gx2(4),basemapName);
+    % end
 end
 
 
 % Powers time history plot
-figure(68);
-clf(68);
-timeBuffer = [];
-pavailBuffer = [];
-preqBuffer = [];
-powavail_plot = plot(nan, nan);
-hold on;
-powreq_plot = plot(nan, nan);
-xlabel('Time (ms)');
-ylabel('Power (W)');
-title('Time vs Power avail/req');
-legend('Power Available', 'Power Required');
-grid on;
+% figure(68);
+% clf(68);
+% timeBuffer = [];
+% pavailBuffer = [];
+% preqBuffer = [];
+% powavail_plot = plot(nan, nan);
+% hold on;
+% powreq_plot = plot(nan, nan);
+% xlabel('Time (ms)');
+% ylabel('Power (W)');
+% title('Time vs Power avail/req');
+% legend('Power Available', 'Power Required');
+% grid on;
 
 %% Connect to Mavlink
 % UDP Client to connect
@@ -195,7 +211,7 @@ MESSAGE.SCALED_PRESSURE2=mavlinksub(gcsNode,uavClient,'SCALED_PRESSURE2');
 MESSAGE.RPM=mavlinksub(gcsNode,uavClient,'RPM');
 MESSAGE.ATTITUDE=mavlinksub(gcsNode,uavClient,'ATTITUDE');
 MESSAGE.AOA_SSA=mavlinksub(gcsNode,uavClient,'AOA_SSA');
-% MESSAGE.NAMED_VALUE_FLOAT=mavlinksub(gcsNode,uavClient,'NAMED_VALUE_FLOAT');
+MESSAGE.NAMED_VALUE_FLOAT=mavlinksub(gcsNode,uavClient,'NAMED_VALUE_FLOAT');
 pause(1)
 
 
@@ -214,32 +230,36 @@ while 1<2
         time = SYSTEM_TIME.Payload.time_boot_ms;
         unixTime = SYSTEM_TIME.Payload.time_unix_usec;
 
-        RAW_IMU = latestmsgs(MESSAGE.RAW_IMU,1);
-        VFR_HUD = latestmsgs(MESSAGE.VFR_HUD,1);
-        LOCALPOSITION_NED =  latestmsgs(MESSAGE.LOCALPOSITION_NED,1);
-        SCALED_PRESSURE = latestmsgs(MESSAGE.SCALED_PRESSURE, 1);
-        RPMraw = latestmsgs(MESSAGE.RPM, 1);
-        ATTITUDE = latestmsgs(MESSAGE.ATTITUDE,1);
-        BATTERY_STATUS=latestmsgs(MESSAGE.BATTERY_STATUS,1);
-        SCALED_PRESSURE2 = latestmsgs(MESSAGE.SCALED_PRESSURE2,1);
-        AOA_SSA = latestmsgs(MESSAGE.AOA_SSA,1);
-        AOA = double(AOA_SSA.Payload.AOA);
-        temperature = double(SCALED_PRESSURE2.Payload.temperature_press_diff)./100;
-        pressure = double(SCALED_PRESSURE.Payload.press_abs) .* 100;
-        density = pressure ./ ((temperature+273.15).*287.05);
+        % RAW_IMU = latestmsgs(MESSAGE.RAW_IMU,1);
+        % VFR_HUD = latestmsgs(MESSAGE.VFR_HUD,1);
+        % LOCALPOSITION_NED =  latestmsgs(MESSAGE.LOCALPOSITION_NED,1);
+        % SCALED_PRESSURE = latestmsgs(MESSAGE.SCALED_PRESSURE, 1);
+        % RPMraw = latestmsgs(MESSAGE.RPM, 1);
+        % ATTITUDE = latestmsgs(MESSAGE.ATTITUDE,1);
+        % BATTERY_STATUS=latestmsgs(MESSAGE.BATTERY_STATUS,1);
+        % SCALED_PRESSURE2 = latestmsgs(MESSAGE.SCALED_PRESSURE2,1);
+        % AOA_SSA = latestmsgs(MESSAGE.AOA_SSA,1);
+        % NAMED_VALUE_FLOAT = latestmsgs(MESSAGE.NAMED_VALUE_FLOAT,1);
+        if strcmp(string(NAMED_VALUE_FLOAT.Payload.name(1:9)),"V_thermal") == 1
+            V_thermal_Lua = double(NAMED_VALUE_FLOAT.Payload.value)
+        end
+        % AOA = double(AOA_SSA.Payload.AOA);
+        % temperature = double(SCALED_PRESSURE2.Payload.temperature_press_diff)./100;
+        % pressure = double(SCALED_PRESSURE.Payload.press_abs) .* 100;
+        % density = pressure ./ ((temperature+273.15).*287.05);
 
         % Getting TAS airspeed
-        airspeed = double(VFR_HUD.Payload.airspeed) ./ sqrt(density./1.225);
+        % airspeed = double(VFR_HUD.Payload.airspeed) ./ sqrt(density./1.225);
 
         % Getting descent rate
-        roc = (-double(LOCALPOSITION_NED.Payload.vz));
+        % roc = (-double(LOCALPOSITION_NED.Payload.vz));
 
         % Getting ESC RPM
-        rpm = double(RPMraw.Payload.rpm1);
-        n = rpm ./ 60;
-        if rpm<1000
-            n=0;
-        end
+        % rpm = double(RPMraw.Payload.rpm1);
+        % n = rpm ./ 60;
+        % if rpm<1000
+        %     n=0;
+        % end
 
         xacc = double(RAW_IMU.Payload.xacc)./ 100;
         zacc = -double(RAW_IMU.Payload.zacc) ./ 100;
@@ -257,12 +277,12 @@ while 1<2
   if vario == 1
  if toc(variotimer) > variowait
 
-      thermal = thermbuffsmoothed(end) ;
+      thermal = thermbuff(end) ;
         
         if thermal > 3
             thermal = 3;
         elseif thermal < -3
-            thermal = -3
+            thermal = -3;
         end
         try
             if thermal > 0.3
@@ -306,7 +326,7 @@ while 1<2
                 ramp = linspace(0, 1, 200);
                 s(1:200) = s(1:200).*ramp; %fade in and out
                 s(end-199:end) = s(end-199:end).*flip(ramp);
-                sound([s], Fs)                                    % Produce Tone As Sound
+                sound([s], Fs);                                    % Produce Tone As Sound
                 variowait = (0.8); % need to get this time right
                 lastw = w(end-200);
                toc(temptimer)
@@ -336,7 +356,7 @@ while 1<2
         [powavail,T] = fcn_poweravail(rpm,propd,density,airspeed,AOA,vehicle,prop);
 
 
-        D = fcn_drag(m,zacc,xacc,T,AOA,density,airspeed,vehicle);
+        D = fcn_drag(m,zacc,xacc,T,AOA,roll,density,airspeed,vehicle);
 
 
         accelpow = fcn_accelpower(m,xacc,zacc,g,pitch,roll,airspeed,AOA);
@@ -375,6 +395,9 @@ while 1<2
         P_thermal = powreq - powavail;
 
         V_thermal = P_thermal./ (m*g); %thermal speed
+
+         % V_thermal = V_thermal_Lua;
+        
         V_thermal_smoothed = V_thermal_smoothed*0.4 + V_thermal*0.6;
 
         thermbuff = [thermbuff(2:end) V_thermal];
@@ -389,7 +412,7 @@ while 1<2
         catch
         end
 
-        thermbuffplot = thermbuffsmoothed;
+        thermbuffplot = thermbuff;
 
         try
             mint = min(thermbuffplot(2:end-1));
