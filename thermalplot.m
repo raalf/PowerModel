@@ -8,9 +8,9 @@ clc
 clear
 
 %% audio vario
-vario =1;
+audiovario =0;
 
-if vario == 1
+if audiovario == 1
 
 %[thermal strength; freq Hz; beep period]
  lift = [0.3 1 3 ; 550 700 2000 ; 1 1 0.2];
@@ -33,7 +33,7 @@ url = 'https://google.com';
 
 plottimer = tic;
 buffsize = 140; %number of points to show
-freq = 30; %frequency to average at Hz (need to be high to get solar data)
+freq = 60; %frequency to average at Hz (need to be high to get solar data)
 plotper = 0.33; %plot period in s
 
 latbuff = NaN(1,buffsize);
@@ -135,7 +135,7 @@ while strcmp(string(NAMED_VALUE_FLOAT.Payload.name(1:9)),"V_thermal") == 0
            error('No V_thermal from LUA')
        end
 end
-
+V_thermal_Lua = double(NAMED_VALUE_FLOAT.Payload.value);
 %% Update Plot
 
 while 1<2
@@ -160,7 +160,7 @@ while 1<2
 
     end
 
-  if vario == 1
+  if audiovario == 1
  if toc(variotimer) > variowait
 
       thermal = thermbuff(end) ;
@@ -182,7 +182,10 @@ while 1<2
                 t  = linspace(0, duration, Fs.*duration);                        % One Second Time Vector
                 w = w.*ones(size(t,2),1);
 
-                fadet = min([4000,length(t)]);
+                fadet = min([8000,length(t)]);
+                 if lastw == 2*pi*290
+                    lastw =  2*pi*interp1(sink(1,:),sink(2,:),0.3);
+                end
                 w(1:fadet) = linspace(lastw,w(fadet),fadet); %blend from the last frequency
 
                 s = sin(w'.*t) ;        %Create Tone             
@@ -206,8 +209,13 @@ while 1<2
                 duration = 1;
                 t  = linspace(0, duration, Fs.*duration);                        % One Second Time Vector
                 w = w.*ones(size(t,2),1);
-                w(1:4000) = linspace(lastw,w(4000),4000); %blend from the last frequency
                 
+                fadet = min([8000,length(t)]);
+                if lastw == 2*pi*290
+                    lastw =  2*pi*interp1(sink(1,:),sink(2,:),-0.3);
+                end
+                w(1:fadet) = linspace(lastw,w(fadet),fadet); %blend from the last frequency
+
                 s = sin(w'.*t);                 
                 ramp = linspace(0, 1, 200);
                 s(1:200) = s(1:200).*ramp; %fade in and out
